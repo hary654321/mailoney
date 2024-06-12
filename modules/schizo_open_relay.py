@@ -129,6 +129,7 @@ class SMTPChannel(asynchat.async_chat):
             "dest_ip": local_ip,
             "extend" : string_escape(line),
             "protocol":"smtp",
+            "type":"found_terminator",
             "UUID":"<UUID>"
             }
         log_to_file(mailoney.logpath+"/mailoney.json", json.dumps(res))
