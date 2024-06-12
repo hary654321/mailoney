@@ -28,10 +28,9 @@ def string_escape(s, encoding='utf-8'):
              .encode('latin1')         # 1:1 mapping back to bytes
              .decode(encoding))        # Decode original encoding
 
-def log_to_file(file_path, ip, port, data):
+def log_to_file(file_path, message):
     with output_lock:
         with open(file_path, "a") as f:
-            message = "[{0}][{1}:{2}] {3}".format(time.time(), ip, port, string_escape(data))
             print(file_path + " " + message)
             f.write(message + "\n")
 
@@ -118,8 +117,21 @@ class SMTPChannel(asynchat.async_chat):
     def found_terminator(self):
 
         line = EMPTYSTRING.join(self.__line).decode()
-        log_to_file(mailoney.logpath+"/commands.log", self.__addr[0], self.__addr[1], string_escape(line))
-        log_to_hpfeeds("commands",  json.dumps({ "Timestamp":format(time.time()), "ServerName": self.__fqdn, "SrcIP": self.__addr[0], "SrcPort": self.__addr[1],"Commmand" : string_escape(line)}))
+        
+        local_ip, local_port = self.__conn.getsockname()
+        res={
+            "Timestamp":format(time.time()),
+            "app": "cve-2020-7247-smtpd",
+            "name": "cve-2020-7247-smtpd",
+            "src_ip": self.__addr[0], 
+            "src_port": self.__addr[1],
+            "dest_port": local_port, 
+            "dest_ip": local_ip,
+            "extend" : string_escape(line),
+            "protocol":"smtp",
+            "UUID":"<UUID>"
+            }
+        log_to_file(mailoney.logpath+"/mailoney.json", json.dumps(res))
 
         #print(>> DEBUGSTREAM, 'Data:', repr(line))
         self.__line = []
