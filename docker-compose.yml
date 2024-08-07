@@ -3,7 +3,6 @@ services:
   mailoney:
     image: hary654321/mailoney
     restart: always
-    ports:
-      - "2525:25"
+    network_mode: "host"
     volumes:
       - ./logs:/var/log/mailoney

@@ -1,7 +1,8 @@
-__author__ = '@botnet_hunter'
+__author__ = "@botnet_hunter"
 
 from datetime import datetime
 import socket
+
 try:
     import libemu
 except ImportError:
@@ -20,13 +21,17 @@ sys.path.append("../")
 import mailoney
 
 output_lock = threading.RLock()
-hpc,hpfeeds_prefix = mailoney.connect_hpfeeds()
+hpc, hpfeeds_prefix = mailoney.connect_hpfeeds()
 
-def string_escape(s, encoding='utf-8'):
-    return (s.encode('latin1')         # To bytes, required by 'unicode-escape'
-             .decode('unicode-escape') # Perform the actual octal-escaping decode
-             .encode('latin1')         # 1:1 mapping back to bytes
-             .decode(encoding))        # Decode original encoding
+
+def string_escape(s, encoding="utf-8"):
+    return (
+        s.encode("latin1")  # To bytes, required by 'unicode-escape'
+        .decode("unicode-escape")  # Perform the actual octal-escaping decode
+        .encode("latin1")  # 1:1 mapping back to bytes
+        .decode(encoding)
+    )  # Decode original encoding
+
 
 def log_to_file(file_path, message):
     with output_lock:
@@ -34,11 +39,13 @@ def log_to_file(file_path, message):
             print(file_path + " " + message)
             f.write(message + "\n")
 
+
 def log_to_hpfeeds(channel, data):
-        if hpc:
-            message = data
-            hpfchannel=hpfeeds_prefix+"."+channel
-            hpc.publish(hpfchannel, message)
+    if hpc:
+        message = data
+        hpfchannel = hpfeeds_prefix + "." + channel
+        hpc.publish(hpfchannel, message)
+
 
 def process_packet_for_shellcode(packet, ip, port):
     if libemu is None:
@@ -47,21 +54,58 @@ def process_packet_for_shellcode(packet, ip, port):
     r = emulator.test(packet)
     if r is not None:
         # we have shellcode
-        log_to_file(mailoney.logpath+"/shellcode.log", ip, port, "We have some shellcode")
-        #log_to_file(mailoney.logpath+"/shellcode.log", ip, port, emulator.emu_profile_output)
-        #log_to_hpfeeds("/shellcode", ip, port, emulator.emu_profile_output)
-        log_to_file(mailoney.logpath+"/shellcode.log", ip, port, packet)
-        log_to_hpfeeds("shellcode",  json.dumps({ "Timestamp":format(time.time()), "ServerName": self.__fqdn, "SrcIP": self.__addr[0], "SrcPort": self.__addr[1],"Shellcode" :packet}))
+        log_to_file(
+            mailoney.logpath + "/shellcode.log", ip, port, "We have some shellcode"
+        )
+        # log_to_file(mailoney.logpath+"/shellcode.log", ip, port, emulator.emu_profile_output)
+        # log_to_hpfeeds("/shellcode", ip, port, emulator.emu_profile_output)
+        log_to_file(mailoney.logpath + "/shellcode.log", ip, port, packet)
+        log_to_hpfeeds(
+            "shellcode",
+            json.dumps(
+                {
+                    "Timestamp": format(time.time()),
+                    "ServerName": self.__fqdn,
+                    "SrcIP": self.__addr[0],
+                    "SrcPort": self.__addr[1],
+                    "Shellcode": packet,
+                }
+            ),
+        )
+
 
 def generate_version_date():
     now = datetime.now()
-    week_days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    return "{0}, {1} {2} {3} {4}:{5}:{6}".format(week_days[now.weekday()], now.day, months[now.month - 1], now.year, str(now.hour).zfill(2), str(now.minute).zfill(2), str(now.second).zfill(2))
+    week_days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+    return "{0}, {1} {2} {3} {4}:{5}:{6}".format(
+        week_days[now.weekday()],
+        now.day,
+        months[now.month - 1],
+        now.year,
+        str(now.hour).zfill(2),
+        str(now.minute).zfill(2),
+        str(now.second).zfill(2),
+    )
 
-__version__ = 'ESMTP Exim 4.69 #1 {0} -0700'.format(generate_version_date())
-EMPTYSTRING = b''
-NEWLINE = b'\n'
+
+__version__ = "ESMTP Exim 4.69 #1 {0} -0700".format(generate_version_date())
+EMPTYSTRING = b""
+NEWLINE = b"\n"
+
 
 class SMTPChannel(asynchat.async_chat):
     COMMAND = 0
@@ -78,8 +122,25 @@ class SMTPChannel(asynchat.async_chat):
         self.__greeting = 0
         self.__mailfrom = None
         self.__rcpttos = []
-        self.__data = ''
+        self.__data = ""
         from mailoney import srvname
+
+        local_ip, local_port = conn.getsockname()
+        res = {
+            "timestamp": format(time.time()),
+            "app": "cve-2020-7247-smtpd",
+            "name": "cve-2020-7247-smtpd",
+            "src_ip": self.__addr[0],
+            "src_port": self.__addr[1],
+            "dest_port": local_port,
+            "dest_ip": local_ip,
+            "extend": string_escape(EMPTYSTRING.join(self.__line).decode()),
+            "protocol": "smtp",
+            "type": "scan",
+            "UUID": "<UUID>",
+        }
+        log_to_file(mailoney.logpath + "/mailoney.json", json.dumps(res))
+
         self.__fqdn = srvname
         try:
             self.__peer = conn.getpeername()
@@ -90,15 +151,15 @@ class SMTPChannel(asynchat.async_chat):
             if err[0] != errno.ENOTCONN:
                 raise
             return
-        #print(>> DEBUGSTREAM, 'Peer:', repr(self.__peer))
-        #self.set_terminator(b'\r\n')
-        self.set_terminator(b'\n')
-        self.push('220 %s %s' % (self.__fqdn, __version__))
+        # print(>> DEBUGSTREAM, 'Peer:', repr(self.__peer))
+        # self.set_terminator(b'\r\n')
+        self.set_terminator(b"\n")
+        self.push("220 %s %s" % (self.__fqdn, __version__))
 
     # Overrides base class for convenience
     def push(self, msg):
         if type(msg) == str:
-            encoded_msg = msg.encode() 
+            encoded_msg = msg.encode()
         elif type(msg) == bytes:
             encoded_msg = msg
 
@@ -109,46 +170,50 @@ class SMTPChannel(asynchat.async_chat):
         self.__line.append(data)
         self.__rolling_buffer += data
         if len(self.__rolling_buffer) > 1024 * 1024:
-            self.__rolling_buffer = self.__rolling_buffer[len(self.__rolling_buffer) - 1024 * 1024:]
-        process_packet_for_shellcode(self.__rolling_buffer, self.__addr[0], self.__addr[1])
+            self.__rolling_buffer = self.__rolling_buffer[
+                len(self.__rolling_buffer) - 1024 * 1024 :
+            ]
+        process_packet_for_shellcode(
+            self.__rolling_buffer, self.__addr[0], self.__addr[1]
+        )
         del data
 
     # Implementation of base class abstract method
     def found_terminator(self):
 
         line = EMPTYSTRING.join(self.__line).decode()
-        
+
         local_ip, local_port = self.__conn.getsockname()
-        res={
-            "Timestamp":format(time.time()),
+        res = {
+            "timestamp": format(time.time()),
             "app": "cve-2020-7247-smtpd",
             "name": "cve-2020-7247-smtpd",
-            "src_ip": self.__addr[0], 
+            "src_ip": self.__addr[0],
             "src_port": self.__addr[1],
-            "dest_port": local_port, 
+            "dest_port": local_port,
             "dest_ip": local_ip,
-            "extend" : string_escape(line),
-            "protocol":"smtp",
-            "type":"found_terminator",
-            "UUID":"<UUID>"
-            }
-        log_to_file(mailoney.logpath+"/mailoney.json", json.dumps(res))
+            "extend": string_escape(line),
+            "protocol": "smtp",
+            "type": "exploit",
+            "UUID": "<UUID>",
+        }
+        log_to_file(mailoney.logpath + "/mailoney.json", json.dumps(res))
 
-        #print(>> DEBUGSTREAM, 'Data:', repr(line))
+        # print(>> DEBUGSTREAM, 'Data:', repr(line))
         self.__line = []
         if self.__state == self.COMMAND:
             if not line:
-                self.push('500 Error: bad syntax')
+                self.push("500 Error: bad syntax")
                 return
             method = None
-            i = line.find(' ')
+            i = line.find(" ")
             if i < 0:
                 command = line.upper()
                 arg = None
             else:
                 command = line[:i].upper()
-                arg = line[i+1:].strip()
-            method = getattr(self, 'smtp_' + command, None)
+                arg = line[i + 1 :].strip()
+            method = getattr(self, "smtp_" + command, None)
             if not method:
                 self.push('502 Error: command "%s" not implemented' % command)
                 return
@@ -156,64 +221,69 @@ class SMTPChannel(asynchat.async_chat):
             return
         else:
             if self.__state != self.DATA:
-                self.push('451 Internal confusion')
+                self.push("451 Internal confusion")
                 return
             # Remove extraneous carriage returns and de-transparency according
             # to RFC 821, Section 4.5.2.
             data = []
-            for text in line.split('\r\n'):
-                if text and text[0] == '.':
+            for text in line.split("\r\n"):
+                if text and text[0] == ".":
                     data.append(text[1:])
                 else:
                     data.append(text)
             self.__data = NEWLINE.join(data)
-            status = self.__server.process_message(self.__peer, self.__mailfrom, self.__rcpttos, self.__data)
+            status = self.__server.process_message(
+                self.__peer, self.__mailfrom, self.__rcpttos, self.__data
+            )
             self.__rcpttos = []
             self.__mailfrom = None
             self.__state = self.COMMAND
-            self.set_terminator('\r\n')
+            self.set_terminator("\r\n")
             if not status:
-                self.push('250 Ok')
+                self.push("250 Ok")
             else:
                 self.push(status)
 
     # SMTP and ESMTP commands
     def smtp_HELO(self, arg):
+        print("smtp_HELO")
         if not arg:
-            self.push('501 Syntax: HELO hostname')
+            self.push("501 Syntax: HELO hostname")
             return
         if self.__greeting:
-            self.push('503 Duplicate HELO/EHLO')
+            self.push("503 Duplicate HELO/EHLO")
         else:
             self.__greeting = arg
-            self.push('250 %s' % self.__fqdn)
+            self.push("250 %s" % self.__fqdn)
 
     def smtp_EHLO(self, arg):
         if not arg:
-            self.push('501 Syntax: EHLO hostname')
+            self.push("501 Syntax: EHLO hostname")
             return
         if self.__greeting:
-            self.push('503 Duplicate HELO/EHLO')
+            self.push("503 Duplicate HELO/EHLO")
         else:
             self.__greeting = arg
-            self.push('250-{0} Hello {1} [{2}]'.format(self.__fqdn, arg, self.__addr[0]))
-            self.push('250-SIZE 52428800')
-            self.push('250 AUTH LOGIN PLAIN')
+            self.push(
+                "250-{0} Hello {1} [{2}]".format(self.__fqdn, arg, self.__addr[0])
+            )
+            self.push("250-SIZE 52428800")
+            self.push("250 AUTH LOGIN PLAIN")
 
     def smtp_NOOP(self, arg):
         if arg:
-            self.push('501 Syntax: NOOP')
+            self.push("501 Syntax: NOOP")
         else:
-            self.push('250 Ok')
+            self.push("250 Ok")
 
     def smtp_QUIT(self, arg):
         # args is ignored
-        self.push('221 Bye')
+        self.push("221 Bye")
         self.close_when_done()
 
     def smtp_AUTH(self, arg):
         # Accept any auth attempt
-        self.push('235 Authentication succeeded')
+        self.push("235 Authentication succeeded")
 
     # factored
     def __getaddr(self, keyword, arg):
@@ -223,59 +293,59 @@ class SMTPChannel(asynchat.async_chat):
             address = arg[keylen:].strip()
             if not address:
                 pass
-            elif address[0] == '<' and address[-1] == '>' and address != '<>':
+            elif address[0] == "<" and address[-1] == ">" and address != "<>":
                 # Addresses can be in the form <person@dom.com> but watch out
                 # for null address, e.g. <>
                 address = address[1:-1]
         return address
 
     def smtp_MAIL(self, arg):
-        #print(>> DEBUGSTREAM, '===> MAIL', arg)
-        address = self.__getaddr('FROM:', arg) if arg else None
+        # print(>> DEBUGSTREAM, '===> MAIL', arg)
+        address = self.__getaddr("FROM:", arg) if arg else None
         if not address:
-            self.push('501 Syntax: MAIL FROM:<address>')
+            self.push("501 Syntax: MAIL FROM:<address>")
             return
         if self.__mailfrom:
-            self.push('503 Error: nested MAIL command')
+            self.push("503 Error: nested MAIL command")
             return
         self.__mailfrom = address
-        #print(>> DEBUGSTREAM, 'sender:', self.__mailfrom)
-        self.push('250 Ok')
+        # print(>> DEBUGSTREAM, 'sender:', self.__mailfrom)
+        self.push("250 Ok")
 
     def smtp_RCPT(self, arg):
-        #print(>> DEBUGSTREAM, '===> RCPT', arg)
+        # print(>> DEBUGSTREAM, '===> RCPT', arg)
         if not self.__mailfrom:
-            self.push('503 Error: need MAIL command')
+            self.push("503 Error: need MAIL command")
             return
-        address = self.__getaddr('TO:', arg) if arg else None
+        address = self.__getaddr("TO:", arg) if arg else None
         if not address:
-            self.push('501 Syntax: RCPT TO: <address>')
+            self.push("501 Syntax: RCPT TO: <address>")
             return
         self.__rcpttos.append(address)
-        #print(>> DEBUGSTREAM, 'recips:', self.__rcpttos)
-        self.push('250 Ok')
+        # print(>> DEBUGSTREAM, 'recips:', self.__rcpttos)
+        self.push("250 Ok")
 
     def smtp_RSET(self, arg):
         if arg:
-            self.push('501 Syntax: RSET')
+            self.push("501 Syntax: RSET")
             return
         # Resets the sender, recipients, and data, but not the greeting
         self.__mailfrom = None
         self.__rcpttos = []
-        self.__data = ''
+        self.__data = ""
         self.__state = self.COMMAND
-        self.push('250 Ok')
+        self.push("250 Ok")
 
     def smtp_DATA(self, arg):
         if not self.__rcpttos:
-            self.push('503 Error: need RCPT command')
+            self.push("503 Error: need RCPT command")
             return
         if arg:
-            self.push('501 Syntax: DATA')
+            self.push("501 Syntax: DATA")
             return
         self.__state = self.DATA
-        self.set_terminator('\r\n.\r\n')
-        self.push('354 End data with <CR><LF>.<CR><LF>')
+        self.set_terminator("\r\n.\r\n")
+        self.push("354 End data with <CR><LF>.<CR><LF>")
 
 
 class SMTPServer(asyncore.dispatcher):
@@ -295,7 +365,7 @@ class SMTPServer(asyncore.dispatcher):
             raise
         else:
             pass
-            #print(>> DEBUGSTREAM, '%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (self.__class__.__name__, time.ctime(time.time()), localaddr, remoteaddr))
+            # print(>> DEBUGSTREAM, '%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (self.__class__.__name__, time.ctime(time.time()), localaddr, remoteaddr))
 
     def handle_accept(self):
         pair = self.accept()
@@ -307,7 +377,9 @@ class SMTPServer(asyncore.dispatcher):
         self.close()
 
     # API for "doing something useful with the message"
-    def process_message(self, peer, mailfrom, rcpttos, data, mail_options=None,rcpt_options=None):
+    def process_message(
+        self, peer, mailfrom, rcpttos, data, mail_options=None, rcpt_options=None
+    ):
         """Override this abstract method to handle messages from the client.
 
         peer is a tuple containing (ipaddr, port) of the client that made the
@@ -332,37 +404,52 @@ class SMTPServer(asyncore.dispatcher):
         raise NotImplementedError
 
 
-
 def module():
 
     class SchizoOpenRelay(SMTPServer):
 
-        def process_message(self, peer, mailfrom, rcpttos, data, mail_options=None,rcpt_options=None):
-            #setup the Log File
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], '')
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], '*' * 50)
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], 'Mail from: {0}'.format(mailfrom))
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], 'Mail to: {0}'.format(", ".join(rcpttos)))
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], 'Data:')
-            log_to_file(mailoney.logpath+"/mail.log", peer[0], peer[1], data)
+        def process_message(
+            self, peer, mailfrom, rcpttos, data, mail_options=None, rcpt_options=None
+        ):
+            # setup the Log File
+            log_to_file(mailoney.logpath + "/mail.log", peer[0], peer[1], "")
+            log_to_file(mailoney.logpath + "/mail.log", peer[0], peer[1], "*" * 50)
+            log_to_file(
+                mailoney.logpath + "/mail.log",
+                peer[0],
+                peer[1],
+                "Mail from: {0}".format(mailfrom),
+            )
+            log_to_file(
+                mailoney.logpath + "/mail.log",
+                peer[0],
+                peer[1],
+                "Mail to: {0}".format(", ".join(rcpttos)),
+            )
+            log_to_file(mailoney.logpath + "/mail.log", peer[0], peer[1], "Data:")
+            log_to_file(mailoney.logpath + "/mail.log", peer[0], peer[1], data)
 
             loghpfeeds = {}
-            loghpfeeds['ServerName'] = mailoney.srvname
-            loghpfeeds['Timestamp'] = format(time.time())
-            loghpfeeds['SrcIP'] = peer[0]
-            loghpfeeds['SrcPort'] = peer[1]
-            loghpfeeds['MailFrom'] = mailfrom
-            loghpfeeds['MailTo'] = format(", ".join(rcpttos))
-            loghpfeeds['Data'] = data
+            loghpfeeds["ServerName"] = mailoney.srvname
+            loghpfeeds["Timestamp"] = format(time.time())
+            loghpfeeds["SrcIP"] = peer[0]
+            loghpfeeds["SrcPort"] = peer[1]
+            loghpfeeds["MailFrom"] = mailfrom
+            loghpfeeds["MailTo"] = format(", ".join(rcpttos))
+            loghpfeeds["Data"] = data
             log_to_hpfeeds("mail", json.dumps(loghpfeeds))
-
 
     def run():
         honeypot = SchizoOpenRelay((mailoney.bind_ip, mailoney.bind_port), None)
-        print('[*] Mail Relay listening on {}:{}'.format(mailoney.bind_ip, mailoney.bind_port))
+        print(
+            "[*] Mail Relay listening on {}:{}".format(
+                mailoney.bind_ip, mailoney.bind_port
+            )
+        )
         try:
             asyncore.loop()
             print("exiting for some unknown reason")
         except KeyboardInterrupt:
-            print('Detected interruption, terminating...')
+            print("Detected interruption, terminating...")
+
     run()
